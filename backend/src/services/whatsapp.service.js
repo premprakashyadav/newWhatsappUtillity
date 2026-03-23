@@ -13,8 +13,7 @@ const PUPPETEER_ARGS = [
   '--disable-software-rasterizer',
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
-  '--no-zygote',
-  '--single-process',               // Reduces memory usage
+  '--no-zygote',               // Reduces memory usage
   '--disable-extensions',
   '--disable-background-networking',
   '--disable-default-apps',
@@ -73,7 +72,8 @@ puppeteer: {
   executablePath,
   args: [...chromium.args, ...PUPPETEER_ARGS],
   ignoreDefaultArgs: ['--disable-extensions'],
-  timeout: 60000,
+  timeout: 120000,
+  protocolTimeout: 120000,
 }
     });
 
@@ -96,12 +96,26 @@ puppeteer: {
       console.log(`[session] Loading ${sessionId}: ${percent}% — ${message}`);
     });
 
-    client.on('authenticated', () => {
-      console.log(`[session] Authenticated: ${sessionId}`);
-      sessionData.status = 'authenticated';
-      this.emitToSession(sessionId, 'authenticated', { sessionId });
-    });
+    // client.on('authenticated', () => {
+    //   console.log(`[session] Authenticated: ${sessionId}`);
+    //   sessionData.status = 'authenticated';
+    //   this.emitToSession(sessionId, 'authenticated', { sessionId });
+    // });
+client.on('authenticated', () => {
+  sessionData.status = 'authenticated';
 
+  setTimeout(() => {
+    if (sessionData.status !== 'ready') {
+      console.log(`[session] Forcing ready state`);
+      sessionData.status = 'ready';
+
+      this.emitToSession(sessionId, 'ready', {
+        sessionId,
+        phone: sessionData.phone || 'Unknown'
+      });
+    }
+  }, 15000); // 15 sec
+});
     client.on('ready', () => {
       sessionData.status = 'ready';
       sessionData.qr = null;
