@@ -208,12 +208,15 @@
 
       <div *ngIf="sendComplete" class="result-panel">
         <div class="result-header">
-   <h2>
-  {{ sendResults?.[0]?.success ? 'Message Sent! ✓' : 'Send Failed ✕' }}
+ <h2 *ngIf="sendResults && sendResults.length">
+  {{ sendResults[0].success ? 'Message Sent! ✓' : 'Send Failed ✕' }}
 </h2>
           <button class="btn-ghost" (click)="resetForm()">Send Another</button>
         </div>
-        <p *ngIf="!sendResults?.[0]?.success" class="send-error">{{ sendResults?.[0]?.error }}</p>
+        <p *ngIf="sendResults && sendResults.length && !sendResults[0].success" class="send-error">
+  {{ sendResults[0].error }}
+</p>
+    
       </div>
 
       <div *ngIf="!sending && !sendComplete" class="form-card single-form">
