@@ -15,6 +15,6 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://YOUR-FRONTEND-URL.onrender.com
+        value: https://upload-dhu9.onrender.com
     healthCheckPath: /api/health
     autoDeploy: true

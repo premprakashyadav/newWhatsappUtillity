@@ -14,62 +14,105 @@ const { whatsappService } = require('./services/whatsapp.service');
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:4200',
+  'http://localhost:4200',
+  'http://localhost:3000',
+];
+
 const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:4200',
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
+  cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true }
 });
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:4200',
-  credentials: true
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'whatsapp-utility-secret-key',
+  secret: process.env.SESSION_SECRET || 'whatsapp-utility-dev-secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
+  cookie: { secure: process.env.NODE_ENV === 'production', maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// Static uploads
+// Uploads directory
 const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
-// Make io accessible to routes
 app.set('io', io);
 app.set('whatsappService', whatsappService);
 
-// Routes
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
+// ── Health check (shows chromium path for debugging) ─────────────────────────
+app.get('/api/health', (req, res) => {
+  const { execSync } = require('child_process');
+  let chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || 'not set in env';
+  let chromiumExists = false;
 
-// Socket.io
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+  ].filter(Boolean);
 
-  socket.on('init-session', (sessionId) => {
-    socket.join(sessionId);
-    console.log(`Socket ${socket.id} joined session ${sessionId}`);
-  });
+  for (const p of candidates) {
+    if (fs.existsSync(p)) { chromiumPath = p; chromiumExists = true; break; }
+  }
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+  let chromiumVersion = null;
+  if (chromiumExists) {
+    try {
+      chromiumVersion = execSync(`${chromiumPath} --version`, { timeout: 3000 }).toString().trim();
+    } catch (e) { chromiumVersion = 'unable to run'; }
+  }
+
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    node: process.version,
+    env: process.env.NODE_ENV,
+    chromium: {
+      path: chromiumPath,
+      exists: chromiumExists,
+      version: chromiumVersion,
+    },
+    sessions: whatsappService.getAllSessions().length,
   });
 });
 
-// Set io on whatsapp service
+// ── Socket.io ─────────────────────────────────────────────────────────────────
+io.on('connection', (socket) => {
+  console.log('[socket] Client connected:', socket.id);
+
+  socket.on('init-session', (sessionId) => {
+    socket.join(sessionId);
+    console.log(`[socket] ${socket.id} joined session ${sessionId}`);
+
+    // Send current status immediately on join
+    const status = whatsappService.getSessionStatus(sessionId);
+    socket.emit('session-status', status);
+
+    // Re-send QR if already generated
+    if (status.status === 'qr_ready' && status.qr) {
+      socket.emit('qr', { qr: status.qr, sessionId });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[socket] Client disconnected:', socket.id);
+  });
+});
+
 whatsappService.setIo(io);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`   FRONTEND_URL: ${process.env.FRONTEND_URL}`);
 });

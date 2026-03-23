@@ -9,11 +9,30 @@ router.post('/create-session', async (req, res) => {
     const sessionId = req.session.sessionId || uuidv4();
     req.session.sessionId = sessionId;
 
-    const result = await whatsappService.createSession(sessionId);
-    res.json({ success: true, sessionId, ...result });
+    console.log(`[create-session] Starting session: ${sessionId}`);
+
+    // Check if session already exists and is ready
+    const existing = whatsappService.getSessionStatus(sessionId);
+    if (existing.status === 'ready') {
+      console.log(`[create-session] Session already ready: ${sessionId}`);
+      return res.json({ success: true, sessionId, status: 'already_ready' });
+    }
+
+    // Start session asynchronously — respond immediately so frontend can connect socket
+    res.json({ success: true, sessionId, status: 'initializing' });
+
+    // Initialize in background
+    whatsappService.createSession(sessionId).catch(err => {
+      console.error(`[create-session] Background init failed for ${sessionId}:`, err.message);
+      whatsappService.emitToSession(sessionId, 'auth_failure', {
+        sessionId,
+        message: `Failed to start session: ${err.message}`
+      });
+    });
+
   } catch (err) {
-    console.error('Create session error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error('[create-session] Error:', err);
+    res.status(500).json({ success: false, message: err.message, stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined });
   }
 });
 
@@ -21,7 +40,6 @@ router.post('/create-session', async (req, res) => {
 router.get('/session-status', (req, res) => {
   const sessionId = req.session.sessionId || req.query.sessionId;
   if (!sessionId) return res.json({ status: 'not_found' });
-
   const status = whatsappService.getSessionStatus(sessionId);
   res.json({ sessionId, ...status });
 });
@@ -45,7 +63,6 @@ router.post('/logout', async (req, res) => {
 router.get('/check', (req, res) => {
   const sessionId = req.session.sessionId;
   if (!sessionId) return res.json({ loggedIn: false });
-
   const status = whatsappService.getSessionStatus(sessionId);
   res.json({ loggedIn: status.status === 'ready', sessionId, phone: status.phone });
 });
