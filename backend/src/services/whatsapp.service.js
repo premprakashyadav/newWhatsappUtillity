@@ -13,6 +13,7 @@ const PUPPETEER_ARGS = [
   '--disable-software-rasterizer',
   '--disable-accelerated-2d-canvas',
   '--no-first-run',
+  '--single-process',
   '--no-zygote',               // Reduces memory usage
   '--disable-extensions',
   '--disable-background-networking',
