@@ -4,20 +4,32 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 
+// Detect system Chromium path (Render uses Debian/Ubuntu)
+function getChromiumPath() {
+  const candidates = [
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/snap/bin/chromium',
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  // Let puppeteer-core handle it (local dev with Chrome installed)
+  return undefined;
+}
+
 class WhatsAppService {
   constructor() {
-    this.sessions = new Map(); // sessionId -> { client, status, qr, phone }
+    this.sessions = new Map();
     this.io = null;
   }
 
-  setIo(io) {
-    this.io = io;
-  }
+  setIo(io) { this.io = io; }
 
   emitToSession(sessionId, event, data) {
-    if (this.io) {
-      this.io.to(sessionId).emit(event, data);
-    }
+    if (this.io) this.io.to(sessionId).emit(event, data);
   }
 
   async createSession(sessionId) {
@@ -26,19 +38,36 @@ class WhatsAppService {
       if (sess.status === 'ready') return { status: 'already_ready', sessionId };
     }
 
+    const executablePath = getChromiumPath();
+    const puppeteerArgs = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--safebrowsing-disable-auto-update',
+    ];
+
     const client = new Client({
-      authStrategy: new LocalAuth({ clientId: sessionId, dataPath: path.join(__dirname, '../../.wwebjs_auth') }),
+      authStrategy: new LocalAuth({
+        clientId: sessionId,
+        dataPath: path.join(__dirname, '../../.wwebjs_auth')
+      }),
       puppeteer: {
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
+        ...(executablePath ? { executablePath } : {}),
+        args: puppeteerArgs
       }
     });
 
@@ -83,9 +112,7 @@ class WhatsAppService {
     return { status: 'initializing', sessionId };
   }
 
-  getSession(sessionId) {
-    return this.sessions.get(sessionId);
-  }
+  getSession(sessionId) { return this.sessions.get(sessionId); }
 
   getSessionStatus(sessionId) {
     const sess = this.sessions.get(sessionId);
@@ -95,9 +122,7 @@ class WhatsAppService {
 
   async sendMessage(sessionId, to, message, imagePath = null) {
     const sess = this.sessions.get(sessionId);
-    if (!sess || sess.status !== 'ready') {
-      throw new Error('Session not ready');
-    }
+    if (!sess || sess.status !== 'ready') throw new Error('Session not ready');
 
     const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
 
@@ -119,9 +144,12 @@ class WhatsAppService {
     const results = [];
     for (let i = 0; i < contacts.length; i++) {
       const contact = contacts[i];
-      const phone = String(contact.phone || contact.number || contact.Phone || contact.Number || '').replace(/\D/g, '');
+      const phone = String(
+        contact.phone || contact.number || contact.Phone || contact.Number || ''
+      ).replace(/\D/g, '');
+
       const personalizedMsg = contact.name
-        ? message.replace('{name}', contact.name).replace('{Name}', contact.name)
+        ? message.replace(/\{name\}/gi, contact.name)
         : message;
 
       if (!phone) {
@@ -134,7 +162,6 @@ class WhatsAppService {
 
       if (onProgress) onProgress({ current: i + 1, total: contacts.length, result });
 
-      // Delay between messages to avoid spam detection
       if (i < contacts.length - 1) {
         await new Promise(r => setTimeout(r, 2000 + Math.random() * 1000));
       }
@@ -145,20 +172,16 @@ class WhatsAppService {
   async logout(sessionId) {
     const sess = this.sessions.get(sessionId);
     if (sess) {
-      try {
-        await sess.client.logout();
-      } catch (e) {}
+      try { await sess.client.logout(); } catch (e) {}
       this.sessions.delete(sessionId);
     }
     return { success: true };
   }
 
   getAllSessions() {
-    const result = [];
-    for (const [id, sess] of this.sessions) {
-      result.push({ sessionId: id, status: sess.status, phone: sess.phone });
-    }
-    return result;
+    return [...this.sessions.entries()].map(([id, s]) => ({
+      sessionId: id, status: s.status, phone: s.phone
+    }));
   }
 }
 
