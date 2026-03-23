@@ -213,7 +213,7 @@
 </h2>
           <button class="btn-ghost" (click)="resetForm()">Send Another</button>
         </div>
-        <p *ngIf="!sendResults[0]?.success" class="send-error">{{ sendResults[0]?.error }}</p>
+        <p *ngIf="!sendResults?.[0]?.success" class="send-error">{{ sendResults?.[0]?.error }}</p>
       </div>
 
       <div *ngIf="!sending && !sendComplete" class="form-card single-form">
