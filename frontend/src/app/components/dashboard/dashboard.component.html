@@ -1,0 +1,249 @@
+<div class="dashboard">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+          <path d="M20.52 3.48A11.93 11.93 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.18 1.59 6L0 24l6.16-1.57A12 12 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.22-3.48-8.52z"/>
+        </svg>
+      </div>
+      <span class="brand-name">WA Utility</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item" [class.active]="activeTab === 'bulk'" (click)="activeTab = 'bulk'">
+        <span class="nav-icon">📤</span>
+        <span>Bulk Send</span>
+      </button>
+      <button class="nav-item" [class.active]="activeTab === 'single'" (click)="activeTab = 'single'">
+        <span class="nav-icon">✉️</span>
+        <span>Single Send</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="session-info">
+        <div class="session-dot"></div>
+        <div>
+          <p class="session-label">Connected</p>
+          <p class="session-phone">+{{ phone }}</p>
+        </div>
+      </div>
+      <button class="btn-logout" (click)="logout()">
+        <span>⏻</span> Logout
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- ===== BULK SEND ===== -->
+    <div *ngIf="activeTab === 'bulk'" class="tab-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Bulk Send</h1>
+          <p>Upload contacts from Excel and send messages at scale</p>
+        </div>
+      </div>
+
+      <!-- Send Complete State -->
+      <div *ngIf="sendComplete" class="result-panel">
+        <div class="result-header">
+          <h2>Send Complete 🎉</h2>
+          <button class="btn-ghost" (click)="resetForm()">Send Another</button>
+        </div>
+        <div class="result-stats">
+          <div class="stat-card success">
+            <span class="stat-num">{{ successCount }}</span>
+            <span class="stat-label">Sent</span>
+          </div>
+          <div class="stat-card failed">
+            <span class="stat-num">{{ failedCount }}</span>
+            <span class="stat-label">Failed</span>
+          </div>
+          <div class="stat-card total">
+            <span class="stat-num">{{ sendResults.length }}</span>
+            <span class="stat-label">Total</span>
+          </div>
+        </div>
+        <div class="result-list">
+          <div *ngFor="let r of sendResults" class="result-item" [class.success]="r.success" [class.failed]="!r.success">
+            <span class="result-status">{{ r.success ? '✓' : '✕' }}</span>
+            <span class="result-phone">{{ r.to }}</span>
+            <span *ngIf="!r.success" class="result-error">{{ r.error }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sending Progress -->
+      <div *ngIf="sending && !sendComplete" class="progress-panel">
+        <div class="progress-header">
+          <h2>Sending Messages...</h2>
+          <span class="progress-count">{{ sendCurrent }} / {{ sendTotal }}</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" [style.width.%]="sendProgress"></div>
+        </div>
+        <div class="recent-results">
+          <div *ngFor="let r of sendResults.slice(-5)" class="result-item mini" [class.success]="r.success" [class.failed]="!r.success">
+            <span>{{ r.success ? '✓' : '✕' }}</span>
+            <span>{{ r.to }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Form -->
+      <div *ngIf="!sending && !sendComplete" class="form-grid">
+
+        <!-- Step 1: Upload Excel -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="step-badge">1</span>
+            <div>
+              <h3>Upload Contacts</h3>
+              <p>Excel or CSV with phone & name columns</p>
+            </div>
+            <button class="btn-template" (click)="downloadTemplate()">⬇ Template</button>
+          </div>
+
+          <div class="upload-zone" [class.has-file]="contacts.length > 0" (click)="excelInput.click()">
+            <input #excelInput type="file" accept=".xlsx,.xls,.csv" hidden (change)="onExcelUpload($event)">
+            <div *ngIf="!contacts.length && !parsingExcel && !excelError">
+              <div class="upload-icon">📊</div>
+              <p>Click to upload Excel / CSV</p>
+              <small>Supported: .xlsx, .xls, .csv</small>
+            </div>
+            <div *ngIf="parsingExcel" class="parsing-state">
+              <div class="mini-spinner"></div>
+              <p>Parsing file...</p>
+            </div>
+            <div *ngIf="contacts.length > 0 && !parsingExcel" class="file-success">
+              <span class="big-check">✓</span>
+              <p><strong>{{ contacts.length }}</strong> contacts loaded</p>
+              <small>Click to replace</small>
+            </div>
+            <p *ngIf="excelError" class="upload-error">{{ excelError }}</p>
+          </div>
+
+          <!-- Contacts Preview -->
+          <div *ngIf="contacts.length > 0" class="contacts-table-wrap">
+            <table class="contacts-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Phone</th>
+                  <th>Name</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let c of contacts.slice(0, 8); let i = index">
+                  <td class="muted">{{ i + 1 }}</td>
+                  <td>{{ c.phone }}</td>
+                  <td>{{ c.name || '—' }}</td>
+                  <td><button class="remove-btn" (click)="removeContact(i)">✕</button></td>
+                </tr>
+                <tr *ngIf="contacts.length > 8">
+                  <td colspan="4" class="muted center">+{{ contacts.length - 8 }} more contacts</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Step 2: Compose Message -->
+        <div class="form-card">
+          <div class="card-header">
+            <span class="step-badge">2</span>
+            <div>
+              <h3>Compose Message</h3>
+              <p>Use {name} to personalize messages</p>
+            </div>
+          </div>
+
+          <textarea
+            class="message-input"
+            placeholder="Type your message here... Use {name} for personalization"
+            [(ngModel)]="message"
+            rows="6"
+          ></textarea>
+
+          <!-- Image Upload -->
+          <div class="image-section">
+            <div *ngIf="!imagePreview" class="image-upload-zone" (click)="imageInput.click()">
+              <input #imageInput type="file" accept="image/*" hidden (change)="onImageUpload($event)">
+              <span>🖼️</span> Attach Image (Optional)
+            </div>
+            <div *ngIf="imagePreview" class="image-preview-wrap">
+              <img [src]="imagePreview" class="image-preview" alt="Preview" />
+              <button class="remove-image-btn" (click)="removeImage()">✕</button>
+            </div>
+          </div>
+
+          <button
+            class="btn-send"
+            [disabled]="!contacts.length || !message"
+            (click)="sendBulk()"
+          >
+            <span>🚀</span> Send to {{ contacts.length }} Contacts
+          </button>
+
+          <p *ngIf="sendError" class="send-error">{{ sendError }}</p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===== SINGLE SEND ===== -->
+    <div *ngIf="activeTab === 'single'" class="tab-content">
+      <div class="page-header">
+        <div>
+          <h1>Single Send</h1>
+          <p>Send a message to one contact quickly</p>
+        </div>
+      </div>
+
+      <div *ngIf="sendComplete" class="result-panel">
+        <div class="result-header">
+          <h2>{{ sendResults[0]?.success ? 'Message Sent! ✓' : 'Send Failed ✕' }}</h2>
+          <button class="btn-ghost" (click)="resetForm()">Send Another</button>
+        </div>
+        <p *ngIf="!sendResults[0]?.success" class="send-error">{{ sendResults[0]?.error }}</p>
+      </div>
+
+      <div *ngIf="!sending && !sendComplete" class="form-card single-form">
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" class="form-input" [(ngModel)]="singlePhone" placeholder="e.g. 919876543210 (with country code)" />
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea class="message-input" [(ngModel)]="message" placeholder="Type your message..." rows="5"></textarea>
+        </div>
+        <div class="image-section">
+          <div *ngIf="!imagePreview" class="image-upload-zone" (click)="singleImageInput.click()">
+            <input #singleImageInput type="file" accept="image/*" hidden (change)="onImageUpload($event)">
+            <span>🖼️</span> Attach Image (Optional)
+          </div>
+          <div *ngIf="imagePreview" class="image-preview-wrap">
+            <img [src]="imagePreview" class="image-preview" alt="Preview" />
+            <button class="remove-image-btn" (click)="removeImage()">✕</button>
+          </div>
+        </div>
+        <button class="btn-send" [disabled]="!singlePhone || !message" (click)="sendSingle()">
+          <span>✉️</span> Send Message
+        </button>
+        <p *ngIf="sendError" class="send-error">{{ sendError }}</p>
+      </div>
+
+      <div *ngIf="sending" class="progress-panel">
+        <div class="mini-spinner large"></div>
+        <p>Sending message...</p>
+      </div>
+    </div>
+
+  </main>
+</div>

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: whatsapp-utility-backend
+    env: node
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://YOUR-FRONTEND-URL.onrender.com
+    healthCheckPath: /api/health
+    autoDeploy: true
