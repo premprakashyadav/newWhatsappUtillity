@@ -6,6 +6,7 @@ const cors = require('cors');
 const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
+const chromium = require('@sparticuz/chromium');
 
 const authRoutes = require('./routes/auth.routes');
 const messageRoutes = require('./routes/message.routes');
@@ -47,28 +48,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
 
 // ── Health check (shows chromium path for debugging) ─────────────────────────
-app.get('/api/health', (req, res) => {
-  const { execSync } = require('child_process');
-  let chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH || 'not set in env';
-  let chromiumExists = false;
+app.get('/api/health', async (req, res) => {
+  let chromiumPath = null;
 
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-  ].filter(Boolean);
-
-  for (const p of candidates) {
-    if (fs.existsSync(p)) { chromiumPath = p; chromiumExists = true; break; }
-  }
-
-  let chromiumVersion = null;
-  if (chromiumExists) {
-    try {
-      chromiumVersion = execSync(`${chromiumPath} --version`, { timeout: 3000 }).toString().trim();
-    } catch (e) { chromiumVersion = 'unable to run'; }
+  try {
+    chromiumPath = await chromium.executablePath();
+  } catch (e) {
+    console.error('[health] Chromium error:', e.message);
   }
 
   res.json({
@@ -78,8 +64,7 @@ app.get('/api/health', (req, res) => {
     env: process.env.NODE_ENV,
     chromium: {
       path: chromiumPath,
-      exists: chromiumExists,
-      version: chromiumVersion,
+      exists: !!chromiumPath,
     },
     sessions: whatsappService.getAllSessions().length,
   });

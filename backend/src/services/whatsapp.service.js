@@ -4,52 +4,6 @@ const path = require('path');
 const fs = require('fs');
 const chromium = require('@sparticuz/chromium');
 
-// ── Chromium detection ──────────────────────────────────────────────────────
-function getChromiumPath() {
-  // 1. Explicit env var (set in Render dashboard)
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    const p = process.env.PUPPETEER_EXECUTABLE_PATH;
-    if (fs.existsSync(p)) {
-      console.log(`[chromium] Using env path: ${p}`);
-      return p;
-    }
-    console.warn(`[chromium] Env path not found: ${p}`);
-  }
-
-  // 2. Common system paths (Render / Debian / Ubuntu)
-  const candidates = [
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-    '/usr/local/bin/chromium',
-    '/snap/bin/chromium',
-  ];
-
-  for (const p of candidates) {
-    if (fs.existsSync(p)) {
-      console.log(`[chromium] Found at: ${p}`);
-      return p;
-    }
-  }
-
-  // 3. Try `which chromium` as fallback
-  try {
-    const { execSync } = require('child_process');
-    const result = execSync('which chromium || which chromium-browser || which google-chrome', { timeout: 3000 })
-      .toString().trim().split('\n')[0];
-    if (result && fs.existsSync(result)) {
-      console.log(`[chromium] Found via which: ${result}`);
-      return result;
-    }
-  } catch (e) {
-    console.warn('[chromium] which command failed:', e.message);
-  }
-
-  console.error('[chromium] No system Chromium found! Install it with: apt-get install -y chromium');
-  return null;
-}
-
 // ── Puppeteer launch args optimised for Render (low-memory container) ───────
 const PUPPETEER_ARGS = [
   '--no-sandbox',
@@ -73,6 +27,9 @@ const PUPPETEER_ARGS = [
   '--disable-permissions-api',
   '--disable-presentation-api',
   '--disable-remote-fonts',
+  '--disable-features=site-per-process',
+'--disable-background-timer-throttling',
+'--disable-site-isolation-trials'
 ];
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -115,6 +72,7 @@ puppeteer: {
   headless: chromium.headless,
   executablePath,
   args: [...chromium.args, ...PUPPETEER_ARGS],
+  ignoreDefaultArgs: ['--disable-extensions'],
   timeout: 60000,
 }
     });
