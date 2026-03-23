@@ -3,7 +3,7 @@ services:
     name: whatsapp-utility-backend
     env: node
     region: oregon
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: npm install
     startCommand: node src/server.js
