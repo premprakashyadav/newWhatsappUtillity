@@ -2,6 +2,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
+const chromium = require('@sparticuz/chromium');
 
 // ── Chromium detection ──────────────────────────────────────────────────────
 function getChromiumPath() {
@@ -99,10 +100,9 @@ class WhatsAppService {
       this.sessions.delete(sessionId);
     }
 
-    const executablePath = getChromiumPath();
-    if (!executablePath) {
-      throw new Error('Chromium not found. Run: apt-get install -y chromium');
-    }
+const executablePath = await chromium.executablePath();
+
+console.log(`[chromium] Using Sparticuz Chromium: ${executablePath}`);
 
     const authPath = path.join(__dirname, '../../.wwebjs_auth');
     if (!fs.existsSync(authPath)) fs.mkdirSync(authPath, { recursive: true });
@@ -111,12 +111,12 @@ class WhatsAppService {
 
     const client = new Client({
       authStrategy: new LocalAuth({ clientId: sessionId, dataPath: authPath }),
-      puppeteer: {
-        headless: true,
-        executablePath,
-        args: PUPPETEER_ARGS,
-        timeout: 60000,
-      }
+puppeteer: {
+  headless: chromium.headless,
+  executablePath,
+  args: [...chromium.args, ...PUPPETEER_ARGS],
+  timeout: 60000,
+}
     });
 
     const sessionData = { client, status: 'initializing', qr: null, phone: null, sessionId };
